@@ -1,6 +1,5 @@
-import paramiko
 import logging
-import toml
+import paramiko
 
 
 # --- Logging setup ---
@@ -38,12 +37,17 @@ class SSHTaskRunner:
     Loads configuration from a .toml file and manages SSH connections.
     """
 
+    from typing import List
+
     def __init__(self, config_path: str):
         self.config = self._load_config(config_path)
         self.main_ssh = self._create_connection()
+        logger.info("Main SSH connection established.")
 
     def _load_config(self, path: str) -> dict:
         """Loads configuration from a TOML file."""
+
+        import toml
 
         try:
             return toml.load(path)
@@ -112,9 +116,32 @@ class SSHTaskRunner:
             else:
                 logger.error("STDERR:\n" + result["stderr"].strip())
 
-    def test(self, command: Command):
-        result = self._run_command(self.main_ssh, command)
-        self._log_result(result)
+    def execute(self, sequence: List[Command]) -> None:
+        """
+        Executes a sequence of commands.
+
+        Aborts on first failure.
+        """
+
+        try:
+            for step in sequence:
+                if isinstance(step, Command):
+                    result = self._run_command(self.main_ssh, step)
+                    self._log_result(result)
+
+                    if result["exit_status"] != 0:
+                        logger.error("Execution aborted due to command failure.")
+                        return
+                else:
+                    raise ValueError("Invalid step in sequence.")
+
+            logger.info("All commands completed successfully.")
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            raise
+        finally:
+            self.main_ssh.close()
+            logger.info("Main SSH connection closed.")
 
 
 def main() -> None:
@@ -125,15 +152,21 @@ def main() -> None:
     repo_dir = "/home"
 
     show_files = {
-        "command": "ls -al",
+        "command": "ls",
         "description": "Show files.",
     }
+    show_all_files = {
+        "command": "ls -al",
+        "description": "Show all files.",
+    }
 
-    command = Command(**show_files, directory=repo_dir)
+    command_0 = Command(**show_files, directory=repo_dir)
+    command_1 = Command(**show_all_files, directory=repo_dir)
 
     runner = SSHTaskRunner(CONFIG_PATH)
 
-    runner.test(command)
+    sequence = [command_0, command_1]
+    runner.execute(sequence)
 
 
 if __name__ == "__main__":
