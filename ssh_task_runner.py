@@ -69,7 +69,13 @@ class SSHTaskRunner:
 
         full_cmd = command.build()
         description = command.description or command.command
-        logger.info(f"Executing: {description}")
+        result = {
+            "description": description,
+            "command": full_cmd,
+            "stdout": None,
+            "stderr": None,
+            "exit_status": None,
+        }
 
         try:
             stdin, stdout, stderr = ssh.exec_command(full_cmd)
@@ -78,28 +84,37 @@ class SSHTaskRunner:
             err = stderr.read().decode().strip()
             exit_status = stdout.channel.recv_exit_status()
 
-            logger.info(f"Finished: {description} (exit={exit_status})")
+            result["stdout"] = out
+            result["stderr"] = err
+            result["exit_status"] = exit_status
 
-            return {
-                "description": description,
-                "command": full_cmd,
-                "stdout": out,
-                "stderr": err,
-                "exit_status": exit_status,
-            }
+            return result
 
         except Exception as e:
-            logger.exception(f"Failed to execute: {description}")
-            return {
-                "description": description,
-                "command": full_cmd,
-                "stdout": "",
-                "stderr": str(e),
-                "exit_status": -1,
-            }
+            result["stdout"] = ""
+            result["stderr"] = str(e)
+            result["exit_status"] = -1
+
+            return result
+
+    def _log_result(self, result: dict) -> None:
+        """Logs the result of command execution."""
+
+        logger.info(f"Command: {result["description"]}")
+        logger.info(f"Exit status: {result['exit_status']}")
+
+        if result["stdout"].strip():
+            logger.info("STDOUT:\n" + result["stdout"].strip())
+
+        if result["stderr"].strip():
+            if result["exit_status"] == 0:
+                logger.info("STDERR (informational):\n" + result["stderr"].strip())
+            else:
+                logger.error("STDERR:\n" + result["stderr"].strip())
 
     def test(self, command: Command):
-        self._run_command(self.main_ssh, command)
+        result = self._run_command(self.main_ssh, command)
+        self._log_result(result)
 
 
 def main() -> None:
