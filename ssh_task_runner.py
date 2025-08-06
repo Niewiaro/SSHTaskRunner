@@ -11,6 +11,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# --- Command class ---
+class Command:
+    """
+    Represents a shell command to be executed over SSH.
+    """
+
+    def __init__(
+        self, command: str, description: str = "", directory: str = None
+    ) -> None:
+        self.command = command
+        self.description = description
+        self.directory = directory
+
+    def build(self) -> str:
+        if self.directory:
+            return f"cd {self.directory} && {self.command}"
+        return self.command
+
+
 def main() -> None:
     logger.info("Init")
 
